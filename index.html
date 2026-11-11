@@ -289,6 +289,44 @@
                             </select>
                         </div>
 
+                        <!-- Payment Mode (À vista / Parcelado / Recorrente) -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Forma de Pagamento</label>
+                            <div class="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-medium">
+                                <button type="button" id="btnPaySingle" onclick="setPaymentMode('single')"
+                                    class="py-1.5 rounded-lg text-center transition bg-white dark:bg-slate-700 font-bold text-slate-800 dark:text-white shadow-sm">
+                                    À vista
+                                </button>
+                                <button type="button" id="btnPayInstallment" onclick="setPaymentMode('installment')"
+                                    class="py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900">
+                                    Parcelado
+                                </button>
+                                <button type="button" id="btnPayRecurring" onclick="setPaymentMode('recurring')"
+                                    class="py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900">
+                                    Recorrente 🔄
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Installments Options (Hidden by Default) -->
+                        <div id="installmentOptions" class="hidden p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label for="installmentCount" class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Nº de Parcelas</label>
+                                    <input type="number" id="installmentCount" min="2" max="60" value="2"
+                                        class="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 font-semibold">
+                                </div>
+                                <div>
+                                    <label for="installmentValueType" class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">O Valor acima é:</label>
+                                    <select id="installmentValueType"
+                                        class="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500 text-slate-800 dark:text-slate-100 font-semibold">
+                                        <option value="total">Valor Total (Dividir)</option>
+                                        <option value="per_installment">Valor da Parcela</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <button type="submit" 
                             class="w-full py-3 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition shadow-sm flex items-center justify-center gap-2">
                             <i data-lucide="check" class="w-4 h-4"></i>
@@ -363,7 +401,7 @@
                     </div>
 
                     <!-- Filter Controls -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full md:w-auto">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 w-full md:w-auto">
                         <div class="relative">
                             <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
                             <input type="text" id="searchInput" oninput="renderTransactions()" placeholder="Buscar..."
@@ -374,6 +412,13 @@
                         </select>
                         <select id="categoryFilter" onchange="renderTransactions()"
                             class="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
+                        </select>
+                        <select id="paymentModeFilter" onchange="renderTransactions()"
+                            class="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
+                            <option value="all">Todas Formas</option>
+                            <option value="single">À vista</option>
+                            <option value="installment">Parcelados</option>
+                            <option value="recurring">Recorrentes</option>
                         </select>
                     </div>
                 </div>
@@ -927,6 +972,7 @@
         let securityConfig = { pin: null, enabled: false, locked: false };
         let activeTab = 'all';
         let currentFormType = 'expense';
+        let currentPaymentMode = 'single';
         let isDarkMode = false;
 
         let categoryChartInstance = null;
@@ -1267,22 +1313,45 @@
             }
         }
 
-        // Global UI Refresh Function
-        function refreshUI() {
-            updateTabBadgeCounts();
-            if (activeTab === 'dividas') renderDebtsDashboard();
-            else if (activeTab === 'contas_fixas') renderFixedBills();
-            else if (activeTab === 'metas') renderGoals();
-            else if (activeTab === 'tetos') renderBudgetCaps();
-            else if (activeTab === 'ia_assistante') { /* Idle until requested */ }
-            else {
-                renderDashboard();
-                populateMonthFilter();
-                renderTransactions();
-                renderCategoryChart();
-                renderMemberComparisonChart();
-                renderHistoricalTrendChart();
+        function setPaymentMode(mode) {
+            currentPaymentMode = mode;
+            const btnSingle = document.getElementById('btnPaySingle');
+            const btnInstallment = document.getElementById('btnPayInstallment');
+            const btnRecurring = document.getElementById('btnPayRecurring');
+            const instOpts = document.getElementById('installmentOptions');
+
+            [btnSingle, btnInstallment, btnRecurring].forEach(b => {
+                b.className = "py-1.5 rounded-lg text-center transition text-slate-600 dark:text-slate-400 hover:text-slate-900";
+            });
+
+            if (mode === 'single') {
+                btnSingle.className = "py-1.5 rounded-lg text-center transition bg-white dark:bg-slate-700 font-bold text-slate-800 dark:text-white shadow-sm";
+                instOpts.classList.add('hidden');
+            } else if (mode === 'installment') {
+                btnInstallment.className = "py-1.5 rounded-lg text-center transition bg-white dark:bg-slate-700 font-bold text-slate-800 dark:text-white shadow-sm";
+                instOpts.classList.remove('hidden');
+            } else if (mode === 'recurring') {
+                btnRecurring.className = "py-1.5 rounded-lg text-center transition bg-white dark:bg-slate-700 font-bold text-slate-800 dark:text-white shadow-sm";
+                instOpts.classList.add('hidden');
             }
+        }
+
+        function addMonthsToDate(dateStr, monthsToAdd) {
+            if (!dateStr) return new Date().toISOString().split('T')[0];
+            const parts = dateStr.split('-');
+            let year = parseInt(parts[0], 10);
+            let month = parseInt(parts[1], 10) - 1 + monthsToAdd;
+            let day = parseInt(parts[2], 10);
+
+            let targetDate = new Date(year, month, 1);
+            let maxDays = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
+            let finalDay = Math.min(day, maxDays);
+            
+            let yStr = targetDate.getFullYear();
+            let mStr = String(targetDate.getMonth() + 1).padStart(2, '0');
+            let dStr = String(finalDay).padStart(2, '0');
+            return `${yStr}-${mStr}-${dStr}`;
+        }
         }
 
         function updateTabBadgeCounts() {
@@ -1380,6 +1449,7 @@
             const emptyState = document.getElementById('tableEmptyState');
             const monthFilter = document.getElementById('monthFilter').value;
             const categoryFilter = document.getElementById('categoryFilter').value;
+            const paymentModeFilter = document.getElementById('paymentModeFilter')?.value || 'all';
             const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
 
             tbody.innerHTML = '';
@@ -1388,6 +1458,11 @@
                 if (activeTab !== 'all' && t.member !== activeTab) return false;
                 if (monthFilter !== 'all' && t.date.substring(0, 7) !== monthFilter) return false;
                 if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
+                if (paymentModeFilter !== 'all') {
+                    if (paymentModeFilter === 'single' && t.mode && t.mode !== 'single') return false;
+                    if (paymentModeFilter === 'installment' && t.mode !== 'installment') return false;
+                    if (paymentModeFilter === 'recurring' && t.mode !== 'recurring' && !t.isRecurring) return false;
+                }
                 if (searchTerm && !t.description.toLowerCase().includes(searchTerm)) return false;
                 return true;
             });
@@ -1400,6 +1475,120 @@
             } else {
                 emptyState.classList.add('hidden');
             }
+
+            filtered.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition border-b border-slate-100 dark:border-slate-800 last:border-0';
+
+                const catObj = CATEGORIES.find(c => c.id === t.category) || { name: 'Outros', color: '#64748b' };
+                const memObj = MEMBERS.find(m => m.id === t.member) || { name: 'Familiar', badgeBg: 'bg-slate-100', badgeText: 'text-slate-700' };
+                const isExpense = t.type === 'expense';
+
+                let paymentBadgeHtml = '';
+                if (t.mode === 'installment' || t.totalInstallments) {
+                    paymentBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 ml-1.5" title="Compra Parcelada"><i data-lucide="layers" class="w-3 h-3"></i> ${t.installmentNum || '1'}/${t.totalInstallments}</span>`;
+                } else if (t.mode === 'recurring' || t.isRecurring) {
+                    paymentBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 ml-1.5" title="Despesa/Receita Recorrente"><i data-lucide="refresh-cw" class="w-3 h-3"></i> Recorrente</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-xs font-medium text-slate-500 dark:text-slate-400">${formatDate(t.date)}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${memObj.badgeBg} ${memObj.badgeText}">
+                            ${memObj.name}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
+                        ${escapeHtml(t.description)}
+                        ${paymentBadgeHtml}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" style="background-color: ${catObj.color}18; color: ${catObj.color}">
+                            <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${catObj.color}"></span>
+                            ${catObj.name.split('/')[0]}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <span class="text-xs font-semibold ${isExpense ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}">
+                            ${isExpense ? 'Despesa' : 'Receita'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-right font-bold ${isExpense ? 'text-slate-800 dark:text-slate-200' : 'text-emerald-600 dark:text-emerald-400'}">
+                        ${isExpense ? '-' : '+'} ${formatCurrency(t.amount)}
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap text-center">
+                        <button onclick="deleteTransaction('${t.id}')" title="Excluir"
+                            class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        // Add Transaction Handler
+        function handleAddTransaction(e) {
+            e.preventDefault();
+            const desc = document.getElementById('desc').value.trim();
+            const amount = parseFloat(document.getElementById('amount').value);
+            const date = document.getElementById('date').value;
+            const category = document.getElementById('category').value;
+            const member = document.getElementById('memberSelect').value;
+
+            if (!desc || isNaN(amount) || amount <= 0 || !date) {
+                showToast('Preencha todos os campos com valores válidos.', 'error');
+                return;
+            }
+
+            if (currentPaymentMode === 'installment') {
+                const count = parseInt(document.getElementById('installmentCount').value) || 2;
+                const valueType = document.getElementById('installmentValueType').value;
+                const perInstallmentAmount = valueType === 'total' ? (amount / count) : amount;
+                const finalAmount = Math.round(perInstallmentAmount * 100) / 100;
+                const groupId = Date.now().toString();
+
+                for (let i = 1; i <= count; i++) {
+                    const targetDate = addMonthsToDate(date, i - 1);
+                    transactions.unshift({
+                        id: `${groupId}_${i}`,
+                        groupId: groupId,
+                        description: `${desc} (Parcela ${i}/${count})`,
+                        amount: finalAmount,
+                        type: currentFormType,
+                        category: category,
+                        member: member,
+                        date: targetDate,
+                        mode: 'installment',
+                        installmentNum: i,
+                        totalInstallments: count
+                    });
+                }
+                showToast(`${count} parcelas de ${formatCurrency(finalAmount)} registradas!`, 'success');
+            } else {
+                const newTx = {
+                    id: Date.now().toString(),
+                    description: desc,
+                    amount: amount,
+                    type: currentFormType,
+                    category: category,
+                    member: member,
+                    date: date,
+                    mode: currentPaymentMode,
+                    isRecurring: currentPaymentMode === 'recurring'
+                };
+                transactions.unshift(newTx);
+                showToast('Lançamento registrado com sucesso!', 'success');
+            }
+
+            saveAllState();
+            refreshUI();
+
+            document.getElementById('desc').value = '';
+            document.getElementById('amount').value = '';
+            setPaymentMode('single');
+        }
 
             filtered.forEach(t => {
                 const tr = document.createElement('tr');
