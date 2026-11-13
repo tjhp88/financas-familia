@@ -29,11 +29,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Marked.js (para renderizar Markdown das respostas da IA) -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <!-- DOMPurify (sanitiza o HTML gerado pela IA) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+    <!-- Netlify Identity (login por e-mail e senha) -->
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
@@ -49,29 +53,23 @@
 </head>
 <body class="h-full text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-950 flex flex-col min-h-screen transition-colors duration-200">
 
-    <!-- FULLSCREEN LOCK SCREEN (PIN PROTECTION) -->
-    <div id="lockScreen" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center p-4 hidden">
+    <!-- TELA DE LOGIN (Netlify Identity) -->
+    <div id="lockScreen" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-sm w-full text-center space-y-6 shadow-2xl">
             <div class="w-16 h-16 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto">
                 <i data-lucide="lock" class="w-8 h-8"></i>
             </div>
             <div>
-                <h2 class="text-xl font-bold text-white">Finanças Protegidas</h2>
-                <p class="text-xs text-slate-400 mt-1">Digite o PIN de segurança para acessar as contas familiares</p>
+                <h2 class="text-xl font-bold text-white">Finanças da Família</h2>
+                <p class="text-xs text-slate-400 mt-1" id="authMessage">Entre com seu e-mail e senha para acessar as contas da família</p>
             </div>
-            <div class="space-y-4">
-                <input type="password" id="unlockPinInput" maxlength="6" pattern="[0-9]*" placeholder="••••"
-                    onkeyup="if(event.key === 'Enter') unlockApp()"
-                    class="w-full text-center tracking-[1em] text-2xl py-3 bg-slate-800 border border-slate-700 text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <button onclick="unlockApp()"
-                    class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
-                    <i data-lucide="key" class="w-4 h-4"></i> Desbloquear
-                </button>
-                <p id="lockScreenError" class="text-xs text-rose-400 hidden font-medium">PIN incorreto. Tente novamente.</p>
-            </div>
+            <button onclick="openLogin()"
+                class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i> Entrar
+            </button>
             <div class="pt-2 border-t border-slate-800/80">
                 <span class="text-[11px] text-slate-500 flex items-center justify-center gap-1">
-                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Dados 100% locais e seguros
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Acesso somente por convite
                 </span>
             </div>
         </div>
@@ -101,16 +99,10 @@
                     <i data-lucide="sun" id="themeIconLight" class="w-4 h-4 hidden"></i>
                 </button>
 
-                <!-- Lock Now Button -->
-                <button id="lockNowBtn" onclick="lockAppManual()" class="px-3 py-1.5 text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-lg flex items-center gap-1.5 transition hidden" title="Bloquear tela agora">
-                    <i data-lucide="lock" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">Bloquear</span>
-                </button>
-
-                <!-- Security Settings Button -->
-                <button onclick="openSecurityModal()" class="px-3 py-1.5 text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg flex items-center gap-1.5 transition" title="Configurações de Segurança">
-                    <i data-lucide="shield" class="w-4 h-4 text-emerald-400"></i>
-                    <span class="hidden sm:inline">PIN</span>
+                <span id="userEmailChip" class="hidden lg:inline text-xs text-slate-300 px-2"></span>
+                <button onclick="logoutUser()" class="px-3 py-1.5 text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-lg flex items-center gap-1.5 transition" title="Sair da conta">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Sair</span>
                 </button>
 
                 <!-- Backup & Exports -->
@@ -159,8 +151,8 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 self-start sm:self-center">
-                <span id="securityBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                    <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> <span id="securityBadgeText">Sem PIN</span>
+                <span id="syncBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                    <i data-lucide="cloud" class="w-3.5 h-3.5"></i> <span id="syncBadgeText">Sincronizado</span>
                 </span>
                 <div id="activeTabBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     Consolidado
@@ -271,7 +263,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label for="amount" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Valor (R$)</label>
-                                <input type="number" step="0.01" id="amount" required placeholder="0,00" min="0.01"
+                                <input type="number" step="0.01" id="amount" oninput="updatePaymentHint()" required placeholder="0,00" min="0.01"
                                     class="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
                             </div>
                             <div>
@@ -287,6 +279,21 @@
                             <select id="category" required
                                 class="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
                             </select>
+                        </div>
+
+                        <!-- Forma de pagamento -->
+                        <div>
+                            <label for="paymentType" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Forma de Pagamento</label>
+                            <select id="paymentType" onchange="onPaymentTypeChange()" class="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
+                                <option value="cash">À vista</option>
+                                <option value="installment">Parcelado</option>
+                                <option value="recurring">Recorrente (todo mês)</option>
+                            </select>
+                        </div>
+                        <div id="paymentExtra" class="hidden space-y-1">
+                            <label for="paymentCount" id="paymentCountLabel" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Número de parcelas</label>
+                            <input type="number" id="paymentCount" min="2" max="60" value="3" oninput="updatePaymentHint()" class="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
+                            <p id="paymentHint" class="text-[11px] text-slate-500 dark:text-slate-400"></p>
                         </div>
 
                         <button type="submit" 
@@ -369,7 +376,7 @@
                             <input type="text" id="searchInput" oninput="renderTransactions()" placeholder="Buscar..."
                                 class="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
                         </div>
-                        <select id="monthFilter" onchange="renderTransactions()"
+                        <select id="monthFilter" onchange="onMonthChange()"
                             class="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition text-slate-800 dark:text-slate-100">
                         </select>
                         <select id="categoryFilter" onchange="renderTransactions()"
@@ -463,7 +470,7 @@
                     <div class="space-y-1">
                         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Comprometimento Renda</span>
                         <div id="debtIncomeRatio" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">0%</div>
-                        <span class="text-xs text-slate-500 dark:text-slate-400">Da receita mensal familiar</span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">Da receita do mês atual</span>
                     </div>
                     <div class="w-11 h-11 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center">
                         <i data-lucide="percent" class="w-6 h-6"></i>
@@ -811,58 +818,6 @@
 
     </main>
 
-    <!-- SECURITY & PIN SETTINGS MODAL -->
-    <div id="securityModalBackdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-5 border border-slate-100 dark:border-slate-800">
-            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div class="flex items-center gap-2.5 text-slate-900 dark:text-white">
-                    <div class="w-9 h-9 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center">
-                        <i data-lucide="shield-check" class="w-5 h-5"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-base font-bold">Segurança e Privacidade</h3>
-                        <p class="text-xs text-slate-400">Proteja suas finanças com PIN de acesso</p>
-                    </div>
-                </div>
-                <button onclick="closeSecurityModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-
-            <div class="space-y-4">
-                <div class="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700">
-                    <div>
-                        <span class="text-sm font-semibold text-slate-800 dark:text-slate-200 block">Proteção por PIN</span>
-                        <span class="text-xs text-slate-500 dark:text-slate-400">Exigir senha ao abrir o app</span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="pinToggleCheckbox" onchange="togglePinSecurity(this.checked)" class="sr-only peer">
-                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                    </label>
-                </div>
-
-                <div id="pinFormContainer" class="space-y-3 pt-2">
-                    <div>
-                        <label for="newPinInput" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Novo PIN (4 a 6 números)</label>
-                        <input type="password" id="newPinInput" maxlength="6" placeholder="Ex: 1234"
-                            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium">
-                    </div>
-                    <div>
-                        <label for="confirmPinInput" class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Confirmar PIN</label>
-                        <input type="password" id="confirmPinInput" maxlength="6" placeholder="Repita o PIN"
-                            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium">
-                    </div>
-                    <button onclick="saveNewPin()"
-                        class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs sm:text-sm transition flex items-center justify-center gap-2">
-                        <i data-lucide="save" class="w-4 h-4"></i> Salvar Senha PIN
-                    </button>
-                </div>
-            </div>
-
-            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                <button onclick="closeSecurityModal()" class="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition">Fechar</button>
-            </div>
-        </div>
-    </div>
-
     <!-- TOAST NOTIFICATIONS CONTAINER -->
     <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
@@ -924,10 +879,51 @@
         let fixedBills = [];
         let goals = [];
         let budgetCaps = {};
-        let securityConfig = { pin: null, enabled: false, locked: false };
         let activeTab = 'all';
         let currentFormType = 'expense';
         let isDarkMode = false;
+        let currentUser = null;
+        let dataVersion = 0;
+
+        // ---------- Helpers de data (fuso horário LOCAL, nunca UTC) ----------
+        const pad2 = n => String(n).padStart(2, '0');
+        function todayStr() {
+            const d = new Date();
+            return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+        }
+        function monthStr() { return todayStr().substring(0, 7); }
+        // Soma/subtrai meses de uma chave 'YYYY-MM' sem pular dias (sem setMonth)
+        function shiftMonth(key, delta) {
+            const [y, m] = key.split('-').map(Number);
+            const t = y * 12 + (m - 1) + delta;
+            return `${Math.floor(t / 12)}-${pad2((t % 12) + 1)}`;
+        }
+        // Soma meses a uma data 'YYYY-MM-DD' mantendo o último dia válido do mês
+        function addMonthsToDate(dateStr, delta) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const key = shiftMonth(`${y}-${pad2(m)}`, delta);
+            const [ny, nm] = key.split('-').map(Number);
+            const last = new Date(ny, nm, 0).getDate();
+            return `${key}-${pad2(Math.min(d, last))}`;
+        }
+        // Divide um valor em N parcelas em centavos; a diferença vai na última
+        function splitInstallments(total, n) {
+            const cents = Math.round(total * 100);
+            const base = Math.floor(cents / n);
+            const arr = Array(n).fill(base);
+            arr[n - 1] += cents - base * n;
+            return arr.map(c => c / 100);
+        }
+        function safeId(v) { return String(v == null ? '' : v).replace(/[^A-Za-z0-9_-]/g, ''); }
+        function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+        let selectedMonth = monthStr();
+        function inSelectedMonth(t) {
+            return selectedMonth === 'all' || (t.date && t.date.substring(0, 7) === selectedMonth);
+        }
+        function onMonthChange() {
+            selectedMonth = document.getElementById('monthFilter').value || 'all';
+            refreshUI();
+        }
 
         let categoryChartInstance = null;
         let memberChartInstance = null;
@@ -937,13 +933,11 @@
         window.onload = function() {
             initDarkMode();
             lucide.createIcons();
-            loadState();
-            checkLockStatus();
             initTabsNav();
             initMemberSelects();
             initCategoriesSelects();
             initTodayDate();
-            refreshUI();
+            setupAuth();
         };
 
         // Dark Mode Initialization
@@ -973,129 +967,165 @@
             refreshUI();
         }
 
-        // State Storage
-        function loadState() {
-            const savedTx = localStorage.getItem('family_finance_tx_v4');
-            const savedDebts = localStorage.getItem('family_finance_debts_v4');
-            const savedFixed = localStorage.getItem('family_finance_fixed_v4');
-            const savedGoals = localStorage.getItem('family_finance_goals_v4');
-            const savedCaps = localStorage.getItem('family_finance_caps_v4');
-            const savedSec = localStorage.getItem('family_finance_sec_v4');
+        // ================= SANITIZAÇÃO (dados vindos do servidor ou de backup) =================
+        const VALID_CATS = new Set(CATEGORIES.map(c => c.id));
+        const VALID_MEMBERS = new Set(MEMBERS.map(m => m.id).filter(id => !['dividas','contas_fixas','metas','tetos','ia_assistante'].includes(id)));
+        const num = (v, min = 0) => { const n = Number(v); return Number.isFinite(n) && n >= min ? n : null; };
+        const txt = (v, max = 120) => String(v == null ? '' : v).slice(0, max);
+        const dateOk = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+        const member = v => VALID_MEMBERS.has(v) ? v : 'all';
+        const cat = v => VALID_CATS.has(v) ? v : 'outros';
 
-            transactions = savedTx ? JSON.parse(savedTx) : getSampleTransactions();
-            debts = savedDebts ? JSON.parse(savedDebts) : getSampleDebts();
-            fixedBills = savedFixed ? JSON.parse(savedFixed) : getSampleFixedBills();
-            goals = savedGoals ? JSON.parse(savedGoals) : getSampleGoals();
-            budgetCaps = savedCaps ? JSON.parse(savedCaps) : getSampleBudgetCaps();
-            securityConfig = savedSec ? JSON.parse(savedSec) : { pin: null, enabled: false, locked: false };
+        function sanitizePayment(t) {
+            const payment = ['installment', 'recurring'].includes(t.payment) ? t.payment : 'cash';
+            if (payment === 'cash') return { payment };
+            const total = parseInt(t.instTotal), idx = parseInt(t.instNum);
+            if (!safeId(t.groupId) || !(total >= 2 && total <= 60) || !(idx >= 1 && idx <= total)) return { payment: 'cash' };
+            return { payment, groupId: safeId(t.groupId), instNum: idx, instTotal: total };
+        }
+        function sanitizeTransactions(arr) {
+            return (Array.isArray(arr) ? arr : []).map(t => {
+                const amount = num(t && t.amount, 0.005);
+                if (!t || amount === null || !dateOk(t.date)) return null;
+                return { id: safeId(t.id) || newId(), description: txt(t.description), amount,
+                    type: t.type === 'income' ? 'income' : 'expense', category: cat(t.category), member: member(t.member), date: t.date, ...sanitizePayment(t) };
+            }).filter(Boolean);
+        }
+        function sanitizeDebts(arr) {
+            return (Array.isArray(arr) ? arr : []).map(d => {
+                const total = num(d && d.totalAmount, 0.005), inst = num(d && d.installmentAmount, 0.005);
+                const n = parseInt(d && d.totalInstallments), paid = parseInt(d && d.paidInstallments) || 0;
+                const day = parseInt(d && d.dueDay);
+                if (!d || total === null || inst === null || !(n >= 1)) return null;
+                const remaining = Math.min(total, num(d.remainingAmount, 0) ?? 0);
+                return { id: safeId(d.id) || newId(), title: txt(d.title), creditor: txt(d.creditor), member: member(d.member),
+                    totalAmount: total, remainingAmount: remaining, installmentAmount: inst, totalInstallments: n,
+                    paidInstallments: Math.max(0, Math.min(paid, n)), dueDay: day >= 1 && day <= 31 ? day : 1,
+                    category: cat(d.category), status: remaining <= 0 ? 'paid' : 'active' };
+            }).filter(Boolean);
+        }
+        function sanitizeFixed(arr) {
+            return (Array.isArray(arr) ? arr : []).map(f => {
+                const amount = num(f && f.amount, 0.005), day = parseInt(f && f.dueDay);
+                if (!f || amount === null) return null;
+                return { id: safeId(f.id) || newId(), title: txt(f.title), amount, dueDay: day >= 1 && day <= 31 ? day : 1,
+                    member: member(f.member), category: cat(f.category),
+                    lastPaidMonth: /^\d{4}-\d{2}$/.test(f.lastPaidMonth || '') ? f.lastPaidMonth : '', paidTxId: safeId(f.paidTxId) };
+            }).filter(Boolean);
+        }
+        function sanitizeGoals(arr) {
+            return (Array.isArray(arr) ? arr : []).map(g => {
+                const target = num(g && g.target, 0.005), current = num(g && g.current, 0);
+                if (!g || target === null) return null;
+                return { id: safeId(g.id) || newId(), title: txt(g.title), target, current: Math.min(current ?? 0, target) };
+            }).filter(Boolean);
+        }
+        function sanitizeCaps(obj) {
+            const out = {};
+            if (obj && typeof obj === 'object') Object.keys(obj).forEach(k => { const v = num(obj[k], 0.005); if (VALID_CATS.has(k) && v !== null) out[k] = v; });
+            return out;
+        }
+        function applyData(d) {
+            d = d || {};
+            transactions = sanitizeTransactions(d.transactions);
+            debts = sanitizeDebts(d.debts);
+            fixedBills = sanitizeFixed(d.fixedBills);
+            goals = sanitizeGoals(d.goals);
+            budgetCaps = sanitizeCaps(d.budgetCaps);
+        }
+        function snapshot() { return { transactions, debts, fixedBills, goals, budgetCaps }; }
 
-            saveAllState();
+        // ================= LOGIN (Netlify Identity) + SINCRONIZAÇÃO =================
+        function showAuthScreen(show, msg) {
+            document.getElementById('lockScreen').style.display = show ? 'flex' : 'none';
+            if (msg) document.getElementById('authMessage').textContent = msg;
+        }
+        function setSyncStatus(status) {
+            const el = document.getElementById('syncBadgeText');
+            if (!el) return;
+            el.textContent = { saving: 'Salvando...', saved: 'Sincronizado', error: 'Erro ao salvar', loading: 'Carregando...' }[status] || status;
+        }
+        function setupAuth() {
+            if (!window.netlifyIdentity) {
+                showAuthScreen(true, 'Não foi possível carregar o serviço de login. Verifique a conexão.');
+                return;
+            }
+            netlifyIdentity.on('init', user => { if (user) onLogin(user); else showAuthScreen(true); });
+            netlifyIdentity.on('login', user => { netlifyIdentity.close(); onLogin(user); });
+            netlifyIdentity.on('logout', () => {
+                currentUser = null;
+                applyData({});
+                refreshUI();
+                showAuthScreen(true, 'Você saiu da conta.');
+            });
+            netlifyIdentity.init();
+        }
+        function openLogin() { if (window.netlifyIdentity) netlifyIdentity.open('login'); }
+        function logoutUser() { if (window.netlifyIdentity) netlifyIdentity.logout(); }
+
+        async function onLogin(user) {
+            currentUser = user;
+            document.getElementById('userEmailChip').textContent = user.email || '';
+            document.getElementById('userEmailChip').classList.remove('hidden');
+            showAuthScreen(false);
+            await loadFromServer();
         }
 
+        async function authFetch(url, opts = {}) {
+            const token = await currentUser.jwt();
+            return fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, ...(opts.headers || {}) } });
+        }
+
+        async function loadFromServer() {
+            if (!currentUser) return;
+            setSyncStatus('loading');
+            try {
+                const r = await authFetch('/api/data');
+                if (r.status === 401) { showAuthScreen(true, 'Sessão expirada. Entre novamente.'); return; }
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                dataVersion = j.version || 0;
+                applyData(j.data);
+                setSyncStatus('saved');
+            } catch (e) {
+                setSyncStatus('error');
+                showToast('Não foi possível carregar os dados da família.', 'error');
+            }
+            refreshUI();
+        }
+
+        let saveTimer = null;
+        let savePending = false;
         function saveAllState() {
-            localStorage.setItem('family_finance_tx_v4', JSON.stringify(transactions));
-            localStorage.setItem('family_finance_debts_v4', JSON.stringify(debts));
-            localStorage.setItem('family_finance_fixed_v4', JSON.stringify(fixedBills));
-            localStorage.setItem('family_finance_goals_v4', JSON.stringify(goals));
-            localStorage.setItem('family_finance_caps_v4', JSON.stringify(budgetCaps));
-            localStorage.setItem('family_finance_sec_v4', JSON.stringify(securityConfig));
+            if (!currentUser) return;
+            savePending = true;
+            setSyncStatus('saving');
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(pushToServer, 500);
         }
-
-        // Lock Screen Security
-        function checkLockStatus() {
-            const lockScreen = document.getElementById('lockScreen');
-            const lockNowBtn = document.getElementById('lockNowBtn');
-            const secBadgeText = document.getElementById('securityBadgeText');
-
-            if (securityConfig.enabled && securityConfig.pin) {
-                lockNowBtn.classList.remove('hidden');
-                secBadgeText.textContent = 'Proteção PIN Ativa';
-                if (securityConfig.locked) {
-                    lockScreen.classList.remove('hidden');
-                    document.getElementById('unlockPinInput').focus();
-                } else {
-                    lockScreen.classList.add('hidden');
+        async function pushToServer() {
+            if (!currentUser) return;
+            try {
+                const r = await authFetch('/api/data', { method: 'PUT', body: JSON.stringify({ ...snapshot(), version: dataVersion }) });
+                if (r.status === 409) {
+                    savePending = false;
+                    showToast('Outro aparelho alterou os dados. Recarregando a versão mais recente.', 'info');
+                    await loadFromServer();
+                    return;
                 }
-            } else {
-                lockNowBtn.classList.add('hidden');
-                secBadgeText.textContent = 'Sem PIN';
-                lockScreen.classList.add('hidden');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                dataVersion = j.version;
+                savePending = false;
+                setSyncStatus('saved');
+            } catch (e) {
+                setSyncStatus('error');
+                showToast('Falha ao salvar. Verifique a conexão e tente de novo.', 'error');
             }
         }
-
-        function unlockApp() {
-            const pinInput = document.getElementById('unlockPinInput');
-            const errorMsg = document.getElementById('lockScreenError');
-
-            if (pinInput.value === securityConfig.pin) {
-                securityConfig.locked = false;
-                saveAllState();
-                document.getElementById('lockScreen').classList.add('hidden');
-                errorMsg.classList.add('hidden');
-                pinInput.value = '';
-                showToast('Acesso liberado!', 'success');
-            } else {
-                errorMsg.classList.remove('hidden');
-                pinInput.value = '';
-                pinInput.focus();
-            }
-        }
-
-        function lockAppManual() {
-            if (securityConfig.enabled && securityConfig.pin) {
-                securityConfig.locked = true;
-                saveAllState();
-                checkLockStatus();
-                showToast('Aplicativo bloqueado com segurança.', 'info');
-            }
-        }
-
-        function openSecurityModal() {
-            const toggle = document.getElementById('pinToggleCheckbox');
-            toggle.checked = securityConfig.enabled;
-            document.getElementById('securityModalBackdrop').classList.remove('hidden');
-        }
-
-        function closeSecurityModal() {
-            document.getElementById('securityModalBackdrop').classList.add('hidden');
-        }
-
-        function togglePinSecurity(enabled) {
-            if (enabled && !securityConfig.pin) {
-                showToast('Defina um código PIN abaixo para ativar a proteção.', 'info');
-                return;
-            }
-            securityConfig.enabled = enabled;
-            if (!enabled) securityConfig.locked = false;
-            saveAllState();
-            checkLockStatus();
-            showToast(enabled ? 'Proteção por PIN ativada.' : 'Proteção por PIN desativada.', 'info');
-        }
-
-        function saveNewPin() {
-            const newPin = document.getElementById('newPinInput').value.trim();
-            const confirmPin = document.getElementById('confirmPinInput').value.trim();
-
-            if (!/^\d{4,6}$/.test(newPin)) {
-                showToast('O PIN deve conter apenas 4 a 6 números.', 'error');
-                return;
-            }
-
-            if (newPin !== confirmPin) {
-                showToast('Os dois campos de PIN não coincidem.', 'error');
-                return;
-            }
-
-            securityConfig.pin = newPin;
-            securityConfig.enabled = true;
-            securityConfig.locked = false;
-            saveAllState();
-            checkLockStatus();
-            document.getElementById('newPinInput').value = '';
-            document.getElementById('confirmPinInput').value = '';
-            closeSecurityModal();
-            showToast('PIN de segurança configurado com sucesso!', 'success');
-        }
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && currentUser && !savePending) loadFromServer();
+        });
 
         // Dynamic Navigation Tabs
         function initTabsNav() {
@@ -1250,7 +1280,7 @@
         }
 
         function initTodayDate() {
-            document.getElementById('date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('date').value = todayStr();
         }
 
         function setFormType(type) {
@@ -1276,8 +1306,8 @@
             else if (activeTab === 'tetos') renderBudgetCaps();
             else if (activeTab === 'ia_assistante') { /* Idle until requested */ }
             else {
-                renderDashboard();
                 populateMonthFilter();
+                renderDashboard();
                 renderTransactions();
                 renderCategoryChart();
                 renderMemberComparisonChart();
@@ -1303,9 +1333,9 @@
 
         // Dashboard Rendering
         function renderDashboard() {
-            const filtered = activeTab === 'all' 
+            const filtered = (activeTab === 'all' 
                 ? transactions 
-                : transactions.filter(t => t.member === activeTab);
+                : transactions.filter(t => t.member === activeTab)).filter(inSelectedMonth);
 
             let totalIncome = 0;
             let totalExpense = 0;
@@ -1352,11 +1382,11 @@
         // Populate Month Filter
         function populateMonthFilter() {
             const select = document.getElementById('monthFilter');
-            const currentValue = select.value;
+            const currentValue = selectedMonth;
             const months = new Set();
 
             transactions.forEach(t => { if (t.date) months.add(t.date.substring(0, 7)); });
-            months.add(new Date().toISOString().substring(0, 7));
+            months.add(monthStr());
 
             const sorted = Array.from(months).sort().reverse();
             select.innerHTML = '<option value="all">Todos os Meses</option>';
@@ -1372,6 +1402,8 @@
                 if (m === currentValue) opt.selected = true;
                 select.appendChild(opt);
             });
+            select.value = Array.from(select.options).some(o => o.value === currentValue) ? currentValue : 'all';
+            selectedMonth = select.value;
         }
 
         // Transactions Table
@@ -1390,7 +1422,7 @@
                 if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
                 if (searchTerm && !t.description.toLowerCase().includes(searchTerm)) return false;
                 return true;
-            });
+            }).sort((a, b) => b.date.localeCompare(a.date));
 
             document.getElementById('filteredSummary').textContent = `Exibindo ${filtered.length} de ${transactions.length} lançamentos`;
 
@@ -1416,7 +1448,7 @@
                             ${memObj.name}
                         </span>
                     </td>
-                    <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">${escapeHtml(t.description)}</td>
+                    <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">${escapeHtml(t.description)}${t.payment === 'installment' ? ` <span class="ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">Parcela ${t.instNum}/${t.instTotal}</span>` : t.payment === 'recurring' ? ` <span class="ml-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">Recorrente ${t.instNum}/${t.instTotal}</span>` : ''}</td>
                     <td class="px-4 py-3 whitespace-nowrap">
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium" style="background-color: ${catObj.color}18; color: ${catObj.color}">
                             <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${catObj.color}"></span>
@@ -1432,7 +1464,7 @@
                         ${isExpense ? '-' : '+'} ${formatCurrency(t.amount)}
                     </td>
                     <td class="px-4 py-3 whitespace-nowrap text-center">
-                        <button onclick="deleteTransaction('${t.id}')" title="Excluir"
+                        ${t.groupId ? `<button onclick="deleteGroup('${t.groupId}')" title="Excluir toda a série" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition"><i data-lucide="layers" class="w-4 h-4"></i></button>` : ''}<button onclick="deleteTransaction('${t.id}')" title="Excluir"
                             class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition">
                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
@@ -1444,36 +1476,87 @@
         }
 
         // Add Transaction Handler
+        function onPaymentTypeChange() {
+            const type = document.getElementById('paymentType').value;
+            const extra = document.getElementById('paymentExtra');
+            const count = document.getElementById('paymentCount');
+            if (type === 'cash') {
+                extra.classList.add('hidden');
+            } else {
+                extra.classList.remove('hidden');
+                document.getElementById('paymentCountLabel').textContent = type === 'installment' ? 'Número de parcelas' : 'Repetir por quantos meses';
+                count.value = type === 'installment' ? 3 : 12;
+            }
+            updatePaymentHint();
+        }
+
+        function updatePaymentHint() {
+            const type = document.getElementById('paymentType').value;
+            const hint = document.getElementById('paymentHint');
+            const amount = parseFloat(document.getElementById('amount').value);
+            const count = parseInt(document.getElementById('paymentCount').value);
+            const date = document.getElementById('date').value;
+            if (type === 'cash' || !(amount > 0) || !(count >= 2) || !date) { hint.textContent = ''; return; }
+            const last = formatDate(addMonthsToDate(date, count - 1));
+            if (type === 'installment') {
+                const parts = splitInstallments(amount, count);
+                hint.textContent = `Valor total ${formatCurrency(amount)} dividido em ${count}x de ${formatCurrency(parts[0])} (a última parcela ajusta os centavos). Uma por mês, até ${last}.`;
+            } else {
+                hint.textContent = `${formatCurrency(amount)} por mês, lançado ${count} vezes, até ${last}.`;
+            }
+        }
+
         function handleAddTransaction(e) {
             e.preventDefault();
             const desc = document.getElementById('desc').value.trim();
-            const amount = parseFloat(document.getElementById('amount').value);
+            const amount = Math.round(parseFloat(document.getElementById('amount').value) * 100) / 100;
             const date = document.getElementById('date').value;
             const category = document.getElementById('category').value;
-            const member = document.getElementById('memberSelect').value;
+            const memberVal = document.getElementById('memberSelect').value;
+            const payment = document.getElementById('paymentType').value;
+            const count = parseInt(document.getElementById('paymentCount').value);
 
             if (!desc || isNaN(amount) || amount <= 0 || !date) {
                 showToast('Preencha todos os campos com valores válidos.', 'error');
                 return;
             }
+            if (payment !== 'cash' && (!Number.isInteger(count) || count < 2 || count > 60)) {
+                showToast('Informe de 2 a 60 para parcelas/meses.', 'error');
+                return;
+            }
 
-            const newTx = {
-                id: Date.now().toString(),
-                description: desc,
-                amount: amount,
-                type: currentFormType,
-                category: category,
-                member: member,
-                date: date
-            };
+            const base = { description: desc, type: currentFormType, category: category, member: memberVal };
+            const list = [];
+            if (payment === 'cash') {
+                list.push({ ...base, id: newId(), amount, date, payment: 'cash' });
+            } else {
+                const groupId = newId();
+                const amounts = payment === 'installment' ? splitInstallments(amount, count) : Array(count).fill(amount);
+                amounts.forEach((v, i) => list.push({
+                    ...base, id: newId(), amount: v, date: addMonthsToDate(date, i),
+                    payment, groupId, instNum: i + 1, instTotal: count
+                }));
+            }
 
-            transactions.unshift(newTx);
+            transactions.unshift(...list);
             saveAllState();
             refreshUI();
 
             document.getElementById('desc').value = '';
             document.getElementById('amount').value = '';
-            showToast('Lançamento registrado com sucesso!', 'success');
+            document.getElementById('paymentType').value = 'cash';
+            onPaymentTypeChange();
+            showToast(payment === 'cash' ? 'Lançamento registrado com sucesso!' : `${list.length} lançamentos criados (${payment === 'installment' ? 'parcelado' : 'recorrente'})!`, 'success');
+        }
+
+        function deleteGroup(groupId) {
+            const n = transactions.filter(t => t.groupId === groupId).length;
+            showModal('Excluir série completa', `Remover os ${n} lançamentos desta série (parcelas ou recorrência)?`, () => {
+                transactions = transactions.filter(t => t.groupId !== groupId);
+                saveAllState();
+                refreshUI();
+                showToast('Série excluída.', 'info');
+            });
         }
 
         function deleteTransaction(id) {
@@ -1498,14 +1581,14 @@
             const dueDay = parseInt(document.getElementById('debtDueDay').value);
             const category = document.getElementById('debtCategory').value;
 
-            if (!title || !creditor || isNaN(totalAmount) || isNaN(installmentAmount) || isNaN(totalInstallments)) {
+            if (!title || !creditor || isNaN(totalAmount) || isNaN(installmentAmount) || isNaN(totalInstallments) || isNaN(dueDay) || dueDay < 1 || dueDay > 31) {
                 showToast('Por favor, preencha os dados da dívida corretamente.', 'error');
                 return;
             }
 
             const remainingAmount = Math.max(0, totalAmount - (paidInstallments * installmentAmount));
             const newDebt = {
-                id: Date.now().toString(),
+                id: newId(),
                 title: title,
                 creditor: creditor,
                 member: member,
@@ -1543,7 +1626,7 @@
 
             const totalPaid = totalOriginal - totalActive;
             const paidPct = totalOriginal > 0 ? ((totalPaid / totalOriginal) * 100).toFixed(0) : 0;
-            const familyIncome = transactions.filter(t => t.type === 'income').reduce((acc, curr) => acc + curr.amount, 0);
+            const familyIncome = transactions.filter(t => t.type === 'income' && t.date && t.date.substring(0, 7) === monthStr()).reduce((acc, curr) => acc + curr.amount, 0);
             const incomeRatio = familyIncome > 0 ? ((monthlyInstallmentTotal / familyIncome) * 100).toFixed(1) : 0;
 
             document.getElementById('totalDebtActive').textContent = formatCurrency(totalActive);
@@ -1642,13 +1725,13 @@
                 saveAllState();
 
                 transactions.unshift({
-                    id: Date.now().toString(),
+                    id: newId(),
                     description: `Parcela [${debt.paidInstallments}/${debt.totalInstallments}]: ${debt.title}`,
                     amount: debt.installmentAmount,
                     type: 'expense',
                     category: debt.category || 'dividas',
                     member: debt.member || 'all',
-                    date: new Date().toISOString().split('T')[0]
+                    date: todayStr()
                 });
                 saveAllState();
 
@@ -1666,46 +1749,51 @@
             });
         }
 
+        function simulatePayoff(balance, payment, rate) {
+            let b = balance, months = 0, interest = 0;
+            while (b > 0.005 && months < 600) {
+                const j = b * rate;
+                if (payment <= j + 0.005) return null; // parcela não cobre os juros
+                interest += j;
+                b = b + j - payment;
+                months++;
+            }
+            return months >= 600 ? null : { months, interest };
+        }
+
         function calculateAmortization() {
             const balance = parseFloat(document.getElementById('simBalance').value) || 0;
             const installment = parseFloat(document.getElementById('simInstallment').value) || 0;
             const extra = parseFloat(document.getElementById('simExtra').value) || 0;
-            const interestRate = (parseFloat(document.getElementById('simInterest').value) || 0) / 100;
+            const rate = (parseFloat(document.getElementById('simInterest').value) || 0) / 100;
 
             if (balance <= 0 || installment <= 0) {
                 showToast('Preencha pelo menos o Saldo e a Parcela Atual.', 'error');
                 return;
             }
 
-            // Estimate months without extra
-            let b1 = balance;
-            let monthsWithout = 0;
-            while (b1 > 0 && monthsWithout < 360) {
-                const juros = b1 * interestRate;
-                const amort = installment - juros;
-                if (amort <= 0) break;
-                b1 -= amort;
-                monthsWithout++;
+            const base = simulatePayoff(balance, installment, rate);
+            const withExtra = simulatePayoff(balance, installment + extra, rate);
+            const box = document.getElementById('simResultBox');
+            const f = v => formatCurrency(v);
+
+            if (!base) {
+                document.getElementById('simOriginalMonths').textContent = 'Nunca quita';
+                if (withExtra) {
+                    document.getElementById('simNewMonths').textContent = `${withExtra.months} meses (juros ${f(withExtra.interest)})`;
+                    document.getElementById('simSavedInfo').textContent = 'Só o aporte extra consegue quitar a dívida';
+                } else {
+                    document.getElementById('simNewMonths').textContent = 'Nunca quita';
+                    document.getElementById('simSavedInfo').textContent = 'Nem com o extra a parcela cobre os juros';
+                }
+                showToast('A parcela atual não cobre os juros mensais.', 'error');
+            } else {
+                const m2 = withExtra || base;
+                document.getElementById('simOriginalMonths').textContent = `${base.months} meses (juros ${f(base.interest)})`;
+                document.getElementById('simNewMonths').textContent = `${m2.months} meses (juros ${f(m2.interest)})`;
+                document.getElementById('simSavedInfo').textContent = `${base.months - m2.months} meses e ${f(base.interest - m2.interest)} de juros economizados`;
             }
-
-            // Estimate months with extra
-            let b2 = balance;
-            let monthsWith = 0;
-            const totalPayment = installment + extra;
-            while (b2 > 0 && monthsWith < 360) {
-                const juros = b2 * interestRate;
-                const amort = totalPayment - juros;
-                if (amort <= 0) break;
-                b2 -= amort;
-                monthsWith++;
-            }
-
-            const diff = monthsWithout - monthsWith;
-
-            document.getElementById('simOriginalMonths').textContent = `${monthsWithout} parcelas`;
-            document.getElementById('simNewMonths').textContent = `${monthsWith} parcelas`;
-            document.getElementById('simSavedInfo').textContent = `${diff} meses economizados!`;
-            document.getElementById('simResultBox').classList.remove('hidden');
+            box.classList.remove('hidden');
         }
 
         // ================= FIXED BILLS LOGIC =================
@@ -1720,7 +1808,7 @@
             if (!title || isNaN(amount) || isNaN(dueDay)) return;
 
             fixedBills.push({
-                id: Date.now().toString(),
+                id: newId(),
                 title, amount, dueDay, member, category,
                 lastPaidMonth: '' // 'YYYY-MM'
             });
@@ -1735,7 +1823,7 @@
             const container = document.getElementById('fixedBillsList');
             container.innerHTML = '';
 
-            const currentMonth = new Date().toISOString().substring(0, 7);
+            const currentMonth = monthStr();
             let paidCount = 0;
 
             fixedBills.forEach(fb => {
@@ -1774,21 +1862,24 @@
             const fb = fixedBills.find(item => item.id === id);
             if (!fb) return;
 
-            const currentMonth = new Date().toISOString().substring(0, 7);
+            const currentMonth = monthStr();
             if (fb.lastPaidMonth === currentMonth) {
                 fb.lastPaidMonth = '';
+                transactions = transactions.filter(t => t.id !== fb.paidTxId);
+                fb.paidTxId = '';
                 showToast('Status atualizado para Pendente.', 'info');
             } else {
                 fb.lastPaidMonth = currentMonth;
-                // Log expense
+                const txId = newId();
+                fb.paidTxId = txId;
                 transactions.unshift({
-                    id: Date.now().toString(),
+                    id: txId,
                     description: `[Conta Fixa]: ${fb.title}`,
                     amount: fb.amount,
                     type: 'expense',
                     category: fb.category || 'moradia',
                     member: fb.member || 'all',
-                    date: new Date().toISOString().split('T')[0]
+                    date: todayStr()
                 });
                 showToast('Conta marcada como paga e lançada!', 'success');
             }
@@ -1812,7 +1903,7 @@
 
             if (!title || isNaN(target) || target <= 0) return;
 
-            goals.push({ id: Date.now().toString(), title, target, current });
+            goals.push({ id: newId(), title, target, current });
             saveAllState();
             refreshUI();
             e.target.reset();
@@ -1848,6 +1939,7 @@
 
                     <div class="pt-2 flex items-center justify-between gap-2 text-xs">
                         <div class="flex gap-1">
+                            <button onclick="updateGoalAmount('${g.id}', -100)" class="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg font-semibold">-R$100</button>
                             <button onclick="updateGoalAmount('${g.id}', 100)" class="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg font-semibold">+R$100</button>
                             <button onclick="updateGoalAmount('${g.id}', 500)" class="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg font-semibold">+R$500</button>
                         </div>
@@ -1864,7 +1956,7 @@
         function updateGoalAmount(id, delta) {
             const g = goals.find(item => item.id === id);
             if (g) {
-                g.current += delta;
+                g.current = Math.max(0, Math.min(g.target, Math.round((g.current + delta) * 100) / 100));
                 saveAllState();
                 refreshUI();
             }
@@ -1881,7 +1973,7 @@
             const list = document.getElementById('budgetCapsList');
             list.innerHTML = '';
 
-            const currentMonth = new Date().toISOString().substring(0, 7);
+            const currentMonth = monthStr();
             const currentMonthExpenses = {};
 
             transactions.filter(t => t.type === 'expense' && t.date.substring(0, 7) === currentMonth).forEach(t => {
@@ -1957,7 +2049,7 @@
             // Build full financial snapshot context
             let totalIncome = 0;
             let totalExpense = 0;
-            transactions.forEach(t => {
+            transactions.filter(t => t.date && t.date.substring(0, 7) === monthStr()).forEach(t => {
                 if (t.type === 'income') totalIncome += t.amount;
                 else totalExpense += t.amount;
             });
@@ -1972,7 +2064,7 @@
                 }
             });
 
-            const currentMonth = new Date().toISOString().substring(0, 7);
+            const currentMonth = monthStr();
             const categoryExpenses = {};
             transactions.filter(t => t.type === 'expense' && t.date.substring(0, 7) === currentMonth).forEach(t => {
                 categoryExpenses[t.category] = (categoryExpenses[t.category] || 0) + t.amount;
@@ -1980,9 +2072,9 @@
 
             const promptData = `
 SITUAÇÃO FINANCEIRA DA FAMÍLIA (RESUMO):
-- Total Receitas Cadastradas: R$ ${totalIncome.toFixed(2)}
-- Total Despesas Cadastradas: R$ ${totalExpense.toFixed(2)}
-- Saldo Líquido Atual: R$ ${balance.toFixed(2)}
+- Receitas do Mês Atual: R$ ${totalIncome.toFixed(2)}
+- Despesas do Mês Atual: R$ ${totalExpense.toFixed(2)}
+- Saldo do Mês Atual: R$ ${balance.toFixed(2)}
 - Total Saldo Devedor em Dívidas: R$ ${activeDebtsTotal.toFixed(2)}
 - Comprometimento Mensal em Parcelas de Dívidas: R$ ${monthlyDebtInstallments.toFixed(2)}
 - Gastos do Mês Atual por Categoria: ${JSON.stringify(categoryExpenses)}
@@ -1992,55 +2084,21 @@ SITUAÇÃO FINANCEIRA DA FAMÍLIA (RESUMO):
 PERGUNTA/FOCO DO USUÁRIO: ${customPrompt || 'Forneça um diagnóstico geral com 3 ações prioritárias para organizar o orçamento familiar.'}
             `;
 
-            const systemPrompt = `Você é um consultor financeiro pessoal e familiar altamente experiente, prático e motivador. 
-Analise os dados financeiros da família e responda em Português do Brasil usando formatação limpa em Markdown com emojis.
-Sua resposta deve conter:
-1. 📊 **Diagnóstico Geral da Família** (Resumo rápido do equilíbrio entre receita, despesa e dívidas).
-2. 🚨 **Pontos de Atenção / Alertas** (Onde o dinheiro pode estar vazando).
-3. 💡 **3 Ações Práticas e Prioritárias** (Passo a passo acionável para o próximo mês).
-4. 🎯 **Estratégia para Dívidas e Caixinhas** (Dicas para zerar dívidas e construir reserva).`;
-
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: promptData }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] }
-            };
-
-            let retries = 3;
-            let delay = 1000;
-            let success = false;
-            let responseData = null;
-
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (response.ok) {
-                        responseData = await response.json();
-                        success = true;
-                        break;
-                    }
-                } catch (e) {
-                    // Retry backoff
-                }
-                await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
-            }
+            let aiText = null;
+            try {
+                const r = await authFetch('/api/ai', { method: 'POST', body: JSON.stringify({ data: promptData, question: customPrompt }) });
+                if (r.ok) { const j = await r.json(); aiText = j.text || null; }
+            } catch (e) { /* sem nova tentativa: mostra o erro na hora */ }
 
             loading.classList.add('hidden');
             btn.disabled = false;
             btn.classList.remove('opacity-50');
 
-            if (success && responseData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-                const aiText = responseData.candidates[0].content.parts[0].text;
-                markdownResult.innerHTML = marked.parse(aiText);
+            if (aiText) {
+                markdownResult.innerHTML = DOMPurify.sanitize(marked.parse(aiText));
                 showToast('Análise da IA concluída com sucesso!', 'success');
             } else {
-                markdownResult.innerHTML = `<div class="p-4 bg-rose-50 text-rose-700 rounded-xl">Não foi possível conectar ao Assistente Gemini no momento. Verifique sua conexão e tente novamente.</div>`;
+                markdownResult.innerHTML = `<div class="p-4 bg-rose-50 text-rose-700 rounded-xl">Não foi possível obter a análise da IA agora. Tente novamente em instantes.</div>`;
                 showToast('Erro ao obter análise da IA.', 'error');
             }
         }
@@ -2050,9 +2108,9 @@ Sua resposta deve conter:
             const ctx = document.getElementById('categoryChart').getContext('2d');
             const emptyState = document.getElementById('chartEmptyState');
 
-            const tabTransactions = activeTab === 'all' 
+            const tabTransactions = (activeTab === 'all' 
                 ? transactions 
-                : transactions.filter(t => t.member === activeTab);
+                : transactions.filter(t => t.member === activeTab)).filter(inSelectedMonth);
 
             const categoryTotals = {};
             let totalExpense = 0;
@@ -2121,7 +2179,7 @@ Sua resposta deve conter:
 
             MEMBERS.forEach(m => { if (!['dividas', 'contas_fixas', 'metas', 'tetos', 'ia_assistante'].includes(m.id)) memberTotals[m.id] = 0; });
 
-            transactions.filter(t => t.type === 'expense').forEach(t => {
+            transactions.filter(t => t.type === 'expense' && inSelectedMonth(t)).forEach(t => {
                 const key = t.member || 'all';
                 if (memberTotals.hasOwnProperty(key)) {
                     memberTotals[key] += t.amount;
@@ -2165,10 +2223,9 @@ Sua resposta deve conter:
 
             // Collect last 6 months
             for (let i = 5; i >= 0; i--) {
-                const d = new Date();
-                d.setMonth(d.getMonth() - i);
-                const key = d.toISOString().substring(0, 7);
-                const monthName = d.toLocaleString('pt-BR', { month: 'short' }).toUpperCase();
+                const key = shiftMonth(monthStr(), -i);
+                const [yy, mm] = key.split('-').map(Number);
+                const monthName = new Date(yy, mm - 1, 1).toLocaleString('pt-BR', { month: 'short' }).toUpperCase();
                 monthsMap[key] = { label: monthName, income: 0, expense: 0 };
             }
 
@@ -2215,20 +2272,21 @@ Sua resposta deve conter:
             }
 
             let csv = '\uFEFF';
-            csv += 'ID;Data;Responsavel;Descricao;Tipo;Categoria;Valor\n';
+            csv += 'ID;Data;Responsavel;Descricao;Tipo;Categoria;Valor;Pagamento\n';
 
             transactions.forEach(t => {
                 const catObj = CATEGORIES.find(c => c.id === t.category) || { name: 'Outros' };
                 const memObj = MEMBERS.find(m => m.id === t.member) || { name: 'Geral' };
-                const descClean = `"${t.description.replace(/"/g, '""')}"`;
+                const rawDesc = /^[=+\-@\t\r]/.test(t.description) ? "'" + t.description : t.description;
+                const descClean = `"${rawDesc.replace(/"/g, '""')}"`;
                 const typeText = t.type === 'expense' ? 'Despesa' : 'Receita';
-                csv += `${t.id};${formatDate(t.date)};${memObj.name};${descClean};${typeText};${catObj.name};${t.amount.toFixed(2).replace('.', ',')}\n`;
+                csv += `${t.id};${formatDate(t.date)};${memObj.name};${descClean};${typeText};${catObj.name};${t.amount.toFixed(2).replace('.', ',')};${t.payment === 'installment' ? `Parcelado ${t.instNum}/${t.instTotal}` : t.payment === 'recurring' ? `Recorrente ${t.instNum}/${t.instTotal}` : 'A vista'}\n`;
             });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = `financas_familia_${new Date().toISOString().split('T')[0]}.csv`;
+            link.download = `financas_familia_${todayStr()}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -2236,16 +2294,11 @@ Sua resposta deve conter:
         }
 
         function exportJSON() {
-            const fullBackup = {
-                transactions, debts, fixedBills, goals, budgetCaps,
-                security: { enabled: securityConfig.enabled, pin: securityConfig.pin },
-                exportDate: new Date().toISOString()
-            };
-
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullBackup, null, 2));
+            const fullBackup = { ...snapshot(), exportDate: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
             const dlAnchor = document.createElement('a');
-            dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", `backup_financas_familia_${new Date().toISOString().split('T')[0]}.json`);
+            dlAnchor.href = URL.createObjectURL(blob);
+            dlAnchor.download = `backup_financas_familia_${todayStr()}.json`;
             document.body.appendChild(dlAnchor);
             dlAnchor.click();
             dlAnchor.remove();
@@ -2264,18 +2317,16 @@ Sua resposta deve conter:
             reader.onload = function(evt) {
                 try {
                     const imported = JSON.parse(evt.target.result);
-                    if (imported.transactions && Array.isArray(imported.transactions)) {
-                        transactions = imported.transactions;
-                        debts = imported.debts || [];
-                        fixedBills = imported.fixedBills || [];
-                        goals = imported.goals || [];
-                        budgetCaps = imported.budgetCaps || {};
+                    if (!imported || !Array.isArray(imported.transactions)) {
+                        showToast('Formato JSON incompatível.', 'error');
+                        return;
+                    }
+                    showModal('Restaurar Backup', 'Isso substitui TODOS os dados atuais da família pelos do arquivo. Continuar?', () => {
+                        applyData(imported); // valida e limpa todos os campos
                         saveAllState();
                         refreshUI();
                         showToast('Backup restaurado com sucesso!', 'success');
-                    } else {
-                        showToast('Formato JSON incompatível.', 'error');
-                    }
+                    });
                 } catch (err) {
                     showToast('Erro ao ler arquivo de backup.', 'error');
                 }
